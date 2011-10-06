@@ -1,56 +1,35 @@
 #!/usr/bin/env python
 
+import gobject
+import dbus
+from dbus.mainloop.glib import DBusGMainLoop
 import zbar
-from sys import argv
+import os
 
-# create a Processor
-proc = zbar.Processor()
+WEBCAM_DEVICE = '/dev/video0'
+QR_TEXT = 'max'
 
-# configure the Processor
-proc.parse_config('enable')
-
-# initialize the Processor
-device = '/dev/video0'
-if len(argv) > 1:
-    device = argv[1]
-proc.init(device)
-
-# setup a callback
-def my_handler(proc, image, closure):
-    # extract results
+def qr_handler(proc, image, closure):
     for symbol in image:
         if not symbol.count:
-            # do something useful with results
-            print 'decoded', symbol.type, 'symbol', '"%s"' % symbol.data
-            sys.exit(0)
+            if symbol.data == QR_TEXT:
+                os.system('gnome-screensaver-command -d')
+            else:
+                proc.process_one()
 
-proc.set_data_handler(my_handler)
+def screensaver_handler(isScreenSaverActive):
+    if isScreenSaverActive:
+        proc = zbar.Processor()
+        proc.parse_config('enable')
+        device = WEBCAM_DEVICE
+        proc.init(device)
+        proc.set_data_handler(qr_handler)
+        proc.process_one()
 
-# enable the preview window
-#proc.visible = True
-
-# initiate scanning
-#proc.active = True
-proc.process_one()
-#try:
-#    proc.user_wait()
-#except zbar.WindowClosed:
-#    pass
-
-'''
-class SinpleThread(threading.Thread):
-    def __init__(self):
-        threading.Thread.__init__(self)
-
-    def run(self):
-        sinple.app.run(host=settings.host, port=settings.port, debug=settings.debug)
-
-def sinple_close(window):
-    urllib.urlopen("http://%s:%s/shutdown" % (settings.host, settings.port))
-    gtk.main_quit()
-
-thread = SinpleThread()
-thread.start()
-thread.join()
-'''
+bus = dbus.SessionBus(mainloop=DBusGMainLoop())
+screensaver_object = bus.get_object('org.gnome.ScreenSaver', '/org/gnome/ScreenSaver')
+screensaver_interface = dbus.Interface(screensaver_object, 'org.gnome.ScreenSaver')
+screensaver_interface.connect_to_signal('ActiveChanged', screensaver_handler)
+loop = gobject.MainLoop()
+loop.run()
 
